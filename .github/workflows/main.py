@@ -15,7 +15,7 @@ E_ID, E_FIO, E_PHONE, E_POST, E_STATUS = "entry.1088118184", "entry.1449297947",
 
 # ================= СИСТЕМА ЗАХИСТУ =================
 def get_mb_id():
-    """Універсальне отримання ID пристрою для Win та Mac"""
+    """Універсальне отримання ID пристрою для Windows та macOS"""
     try:
         if sys.platform == "darwin":  # macOS
             output = subprocess.check_output(['ioreg', '-l'], stderr=subprocess.STDOUT)
@@ -29,7 +29,7 @@ def get_mb_id():
         return socket.gethostname()
 
 def open_result_path(path):
-    """Універсальне відкриття папок після завершення"""
+    """Універсальне відкриття папок"""
     if sys.platform == "darwin":
         subprocess.call(["open", path])
     else:
@@ -47,98 +47,67 @@ def check_access():
 def register_user(mb_id):
     reg = tk.Tk()
     reg.title("Реєстрація: Модуль автоматизації")
-    
-    window_width = 400
-    window_height = 500
-    screen_width = reg.winfo_screenwidth()
-    screen_height = reg.winfo_screenheight()
-    
+    window_width, window_height = 400, 500
+    screen_width, screen_height = reg.winfo_screenwidth(), reg.winfo_screenheight()
     center_x = int(screen_width/2 - window_width / 2)
     center_y = int(screen_height/2 - window_height / 2)
-    
     reg.geometry(f'{window_width}x{window_height}+{center_x}+{center_y}')
     reg.resizable(False, False)
-
     tk.Label(reg, text="Реєстрація: Модуль автоматизації", fg="red", font=("Arial", 12, "bold")).pack(pady=20)
-    tk.Label(reg, text=f"ПРОГРАМА НЕ АКТИВОВАНА", fg="gray", font=("Arial", 8)).pack()
-    tk.Label(reg, text=f"Ваш ID: {mb_id}", fg="gray", font=("Arial", 8)).pack()
-
+    tk.Label(reg, text=f"ID: {mb_id}", fg="gray", font=("Arial", 8)).pack()
     inputs = []
-    labels = ["ПІБ (Повне ім'я):", "Номер телефону:", "Посада:"]
-    
+    labels = ["ПІБ:", "Телефон:", "Посада:"]
     for label_text in labels:
-        tk.Label(reg, text=label_text, font=("Arial", 11, "bold")).pack(pady=(15, 5))
-        e = tk.Entry(reg, width=40, font=("Arial", 11), justify='center')
-        e.pack(pady=5, ipady=4)
-        inputs.append(e)
-
+        tk.Label(reg, text=label_text, font=("Arial", 11, "bold")).pack(pady=(10, 2))
+        e = tk.Entry(reg, width=35, font=("Arial", 11), justify='center')
+        e.pack(pady=5, ipady=4); inputs.append(e)
     def send():
-        fio = inputs[0].get().strip()
-        phone = inputs[1].get().strip()
-        post = inputs[2].get().strip()
-
+        fio, phone, post = inputs[0].get().strip(), inputs[1].get().strip(), inputs[2].get().strip()
         if not fio or not phone:
-            messagebox.showwarning("Увага", "Будь ласка, заповніть ПІБ та Телефон!"); return
-        
+            messagebox.showwarning("Увага", "Заповніть ПІБ та Телефон!"); return
         d = {E_ID: mb_id, E_FIO: fio, E_PHONE: phone, E_POST: post, E_STATUS: "Доступен"}
-        
         try:
             requests.post(FORM_URL, data=d, timeout=10)
-            messagebox.showinfo("Успіх", "✅ Успіх! \n\nПерезапустіть програму і працюйте!")
-            reg.destroy()
-            os._exit(0)
-        except: 
-            messagebox.showerror("Помилка", "Немає зв'язку з сервером. Перевірте інтернет.")
-
-    tk.Button(reg, text="ЗАРЕЄСТРУВАТИСЯ", bg="#28a745", fg="white", 
-              font=("Arial", 12, "bold"), height=2, width=22, command=send).pack(pady=35)
+            messagebox.showinfo("Успіх", "✅ Готово! Перезапустіть програму.")
+            reg.destroy(); os._exit(0)
+        except: messagebox.showerror("Помилка", "Немає зв'язку з сервером.")
+    tk.Button(reg, text="ЗАРЕЄСТРУВАТИСЯ", bg="#28a745", fg="white", font=("Arial", 11, "bold"), height=2, command=send).pack(pady=30)
     reg.mainloop()
 
 # ================= РОБОЧА ЛОГІКА =================
 def process_logic(excel_path, templates_dir):
     try:
-        # Читаємо Excel з підтримкою сучасних форматів
         df = pd.read_excel(excel_path, header=None)
         subject_name = str(df.iloc[0, 1]).strip()
         safe_name = re.sub(r'[\\/*?:"<>|]', "", subject_name)
-
         context = {}
         for _, row in df.iterrows():
             if pd.isna(row[0]): continue
             key = str(row[0]).strip()
             val = row[1]
             
-            # --- ВИПРАВЛЕННЯ ПРОБЛЕМИ ДАТ ---
+            # --- ВИПРАВЛЕННЯ ДАТ ---
             if isinstance(val, (pd.Timestamp, datetime)):
                 val = val.strftime('%d.%m.%Y')
             elif isinstance(val, str):
-                # Якщо дата прийшла як текст 2024-02-04
+                val = val.strip()
                 if re.match(r'\d{4}-\d{2}-\d{2}', val):
                     try: val = datetime.strptime(val[:10], '%Y-%m-%d').strftime('%d.%m.%Y')
                     except: pass
-                # Якщо дата прийшла як текст 04.02.2024 (просто чистимо)
-                val = val.strip()
-            elif pd.isna(val):
-                val = ""
-            
+            elif pd.isna(val): val = ""
             context[key] = str(val)
 
         res_dir = os.path.join(os.path.dirname(excel_path), f"Результат_{safe_name}")
         if not os.path.exists(res_dir): os.makedirs(res_dir)
-
         for file in os.listdir(templates_dir):
             if file.endswith(".docx") and not file.startswith("~$"):
                 doc = DocxTemplate(os.path.join(templates_dir, file))
                 doc.render(context)
-                new_filename = f"{os.path.splitext(file)[0]}_{safe_name}.docx"
-                doc.save(os.path.join(res_dir, new_filename))
-
-        zip_path = shutil.make_archive(os.path.join(os.path.dirname(excel_path), f"Архів_{safe_name}"), 'zip', res_dir)
-        
-        with open(zip_path, 'rb') as f:
+                doc.save(os.path.join(res_dir, f"{os.path.splitext(file)[0]}_{safe_name}.docx"))
+        zip_p = shutil.make_archive(os.path.join(os.path.dirname(excel_path), f"Архів_{safe_name}"), 'zip', res_dir)
+        with open(zip_p, 'rb') as f:
             requests.post(f"https://api.telegram.org/bot{TOKEN}/sendDocument", data={'chat_id': CHAT_ID}, files={'document': f})
-        
-        os.remove(zip_path)
+        os.remove(zip_p)
         open_result_path(res_dir)
         return True
     except Exception as e: return str(e)
@@ -146,51 +115,24 @@ def process_logic(excel_path, templates_dir):
 # ================= ІНТЕРФЕЙС =================
 def start_app():
     if not check_access(): return
-    
     root = tk.Tk()
-    root.title("Модуль автоматизації v1.3")
-    
-    window_width = 640
-    window_height = 480
-    screen_width = root.winfo_screenwidth()
-    screen_height = root.winfo_screenheight()
-    
-    center_x = int(screen_width/2 - window_width / 2)
-    center_y = int(screen_height/2 - window_height / 2)
-    
-    root.geometry(f'{window_width}x{window_height}+{center_x}+{center_y}')
+    root.title("Military Generator v1.4")
+    root.geometry("640x480")
     root.resizable(False, False)
-
     ex_v, tpl_v = tk.StringVar(), tk.StringVar()
-    main_frame = tk.Frame(root)
-    main_frame.pack(expand=True, fill='both', padx=40)
-
-    tk.Label(main_frame, text="Виберіть файл Excel:", font=("Arial", 12, "bold")).pack(pady=(10, 5))
-    entry_ex = tk.Entry(main_frame, textvariable=ex_v, font=("Arial", 11), justify='center')
-    entry_ex.pack(fill='x', ipady=8, pady=5) 
-    
-    tk.Button(main_frame, text="📁 ОГЛЯД ФАЙЛІВ", font=("Arial", 10, "bold"), 
-              width=25, height=2, command=lambda: ex_v.set(filedialog.askopenfilename())).pack(pady=5)
-
-    tk.Label(main_frame, text="Виберіть папку з шаблонами Word:", font=("Arial", 12, "bold")).pack(pady=(20, 5))
-    entry_tpl = tk.Entry(main_frame, textvariable=tpl_v, font=("Arial", 11), justify='center')
-    entry_tpl.pack(fill='x', ipady=8, pady=5)
-    
-    tk.Button(main_frame, text="📁 ОГЛЯД ПАПОК", font=("Arial", 10, "bold"), 
-              width=25, height=2, command=lambda: tpl_v.set(filedialog.askdirectory())).pack(pady=5)
-
+    f = tk.Frame(root); f.pack(expand=True, fill='both', padx=30)
+    tk.Label(f, text="Excel файл:", font=("Arial", 11, "bold")).pack(pady=(15, 0))
+    tk.Entry(f, textvariable=ex_v, font=("Arial", 10), justify='center').pack(fill='x', ipady=5)
+    tk.Button(f, text="📁 Вибрати Excel", command=lambda: ex_v.set(filedialog.askopenfilename())).pack(pady=5)
+    tk.Label(f, text="Папка з шаблонами:", font=("Arial", 11, "bold")).pack(pady=(15, 0))
+    tk.Entry(f, textvariable=tpl_v, font=("Arial", 10), justify='center').pack(fill='x', ipady=5)
+    tk.Button(f, text="📁 Вибрати папку", command=lambda: tpl_v.set(filedialog.askdirectory())).pack(pady=5)
     def run():
-        if not ex_v.get() or not tpl_v.get():
-            messagebox.showwarning("Увага", "Заповніть усі шляхи!"); return
+        if not ex_v.get() or not tpl_v.get(): return
         res = process_logic(ex_v.get(), tpl_v.get())
-        if res == True:
-            messagebox.showinfo("Успіх", "✅ Генерація завершена успішно!")
-        else:
-            messagebox.showerror("Помилка", f"Сталася помилка:\n{res}")
-
-    tk.Button(main_frame, text="🚀 ЗАПУСТИТИ", bg="#28a745", fg="white", 
-              font=("Arial", 13, "bold"), height=2, width=30, command=run).pack(pady=(40, 20))
-    
+        if res == True: messagebox.showinfo("Успіх", "Готово!")
+        else: messagebox.showerror("Помилка", res)
+    tk.Button(f, text="🚀 ЗАПУСТИТИ", bg="#28a745", fg="white", font=("Arial", 12, "bold"), height=2, command=run).pack(pady=30)
     root.mainloop()
 
 if __name__ == "__main__": start_app()
