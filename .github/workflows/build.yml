@@ -4,13 +4,18 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - run: pip install pandas docxtpl requests openpyxl pyinstaller
-      - run: pyinstaller --onefile --windowed --name "Military_Generator" main.py
-      - uses: actions/upload-artifact@v3
+      - name: Install dependencies
+        run: |
+          pip install pandas docxtpl requests openpyxl pyinstaller
+      - name: Build App
+        run: |
+          pyinstaller --onefile --windowed --name "SZ4_Generator" main.py
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
         with:
           name: Mac-Application
-          path: dist/Military_Generator.app
+          path: dist/SZ4_Generator.app
